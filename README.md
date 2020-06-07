@@ -1,4 +1,3 @@
-
 # Rev-Shell 🖥️
 
 This tool generates a reverse shell for a specific network interface, choosing among different subsystems:
@@ -18,3 +17,5 @@ optional arguments:
 
 ```
 
+## Credits
+Inspired by 👨‍💻[Kx1z0](https://github.com/Kx1z0/rshell)
