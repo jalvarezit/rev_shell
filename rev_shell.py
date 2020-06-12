@@ -3,6 +3,7 @@
 from printy import printy
 import argparse
 import netifaces
+import pyperclip
 
 def get_parser():
     parser = argparse.ArgumentParser(description="Generates a reverse shell command for the specified subsystem")
@@ -79,6 +80,7 @@ def app():
         ifaces = menu()
         option = int(input("Choose what interfaces to use: ")) 
         revshell = get_revshell(args.subsystem,ifaces[option - 1]['addr'],args.port)
+        pyperclip.copy(revshell)
         printy(revshell,'c')
 
 app()
