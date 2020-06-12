@@ -54,8 +54,14 @@ def list_subsystems():
         printy(list_node("+"),end="")
         printy(item,"c")
 
-def is_localhost(address):
-    return address == '127.0.0.1'
+def is_localhost(ip):
+    return ip == '127.0.0.1'
+
+def iptohex(ip):
+    hex_ip = ""
+    for octet in ip.split("."):
+        hex_ip = hex_ip + hex(int(octet))
+    return hex_ip
 
 def menu():
     i = 1
@@ -78,8 +84,12 @@ def app():
         return
     if(args.subsystem):
         ifaces = menu()
-        option = int(input("Choose what interfaces to use: ")) 
-        revshell = get_revshell(args.subsystem,ifaces[option - 1]['addr'],args.port)
+        option = int(input("Choose what interfaces to use: "))
+        if(args.hexadecimal):
+            ip = iptohex(ifaces[option - 1]['addr'])
+        else:
+            ip = ifaces[option - 1]['addr']    
+        revshell = get_revshell(args.subsystem,ip,args.port)
         pyperclip.copy(revshell)
         printy(revshell,'c')
 
